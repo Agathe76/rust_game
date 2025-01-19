@@ -1,4 +1,5 @@
 use macroquad::prelude::*;
+use std::fs;
 
 struct Shape {
     size: f32,
@@ -38,13 +39,17 @@ async fn main() {
         collided: false,
     };
     let mut gameover = false;
+    let mut score: u32 = 0;
+    let mut high_score: u32 = fs::read_to_string("highscore.dat")
+        .map_or(Ok(0), |i| i.parse::<u32>())
+        .unwrap_or(0);
 
     loop {
         clear_background(DARKPURPLE);
 
         if !gameover {
             let delta_time = get_frame_time();
-
+            
             if is_key_down(KeyCode::Right) {
                 circle.x += MOVEMENT_SPEED * delta_time;
             }
@@ -104,35 +109,38 @@ async fn main() {
             bullets.retain(|bullet| !bullet.collided);
         }
 
-        // Check for collisions
-        if squares.iter().any(|square| circle.collides_with(square)) {
-            gameover = true;
-        }
-
-        for square in squares.iter_mut() {
-            for bullet in bullets.iter_mut() {
-                if bullet.collides_with(square) {
-                    bullet.collided = true;
-                    square.collided = true;
-                }
-            }
-        }
-
         if gameover && is_key_pressed(KeyCode::Space) {
             squares.clear();
             bullets.clear();
             circle.x = screen_width() / 2.0;
             circle.y = screen_height() / 2.0;
+            score = 0;
             gameover = false;
+        }
+
+        // Check for collisions
+        if squares.iter().any(|square| circle.collides_with(square)) {
+            if score == high_score {
+                fs::write("highscore.dat", high_score.to_string()).ok();
+            }
+            gameover = true;
+        }
+        for square in squares.iter_mut() {
+            for bullet in bullets.iter_mut() {
+                if bullet.collides_with(square) {
+                    bullet.collided = true;
+                    square.collided = true;
+                    score += square.size.round() as u32;
+                    high_score = high_score.max(score);
+                }
+            }
         }
 
         // Draw everything
         for bullet in &bullets {
             draw_circle(bullet.x, bullet.y, bullet.size / 2.0, RED);
         }
-
         draw_circle(circle.x, circle.y, circle.size / 2.0, YELLOW);
-
         for square in &squares {
             draw_rectangle(
                 square.x - square.size / 2.0,
@@ -143,10 +151,28 @@ async fn main() {
             );
         }
 
+        draw_text(
+            format!("Score: {}", score).as_str(),
+            10.0,
+            35.0,
+            25.0,
+            WHITE,
+        );
+
+        let highscore_text = format!("High score: {}", high_score);
+        let text_dimensions = measure_text(highscore_text.as_str(), None, 25, 1.0);
+
+        draw_text(
+            highscore_text.as_str(),
+            screen_width() - text_dimensions.width - 10.0,
+            35.0,
+            25.0,
+            WHITE,
+        );
         if gameover {
             let text = "GAME OVER!";
-            let text_dimensions = measure_text(text, None, 60, 1.0);
-
+            let text_dimensions = measure_text(text, None, 50, 1.0);
+            
             draw_text(
                 text,
                 screen_width() / 2.0 - text_dimensions.width / 2.0,
